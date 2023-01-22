@@ -1,0 +1,310 @@
+/*
+ * Ryan Sass & Christopher Waight
+ * Santa Clara University
+ * 
+ * Date Published: 12/03/2015
+ * Version Number: 0.5
+ * File: box_party_code.ino
+ * 
+ * Intended to be run on Arduino DUE
+*/
+
+//variable assignments
+int penny, music, streamers, disco, pot, x, start, stspeed,b1,b2,b3,b4,choice,d1,d2,d3,vhigh,vlow;
+unsigned long st_time,cur_time,run_time,duration,waittime;
+
+void setup() {
+  //Serial output setup for debugging
+  //   Serial.begin(115200);
+  
+  //initializes variables
+  //timeout valey for penny
+  waittime = 5000;
+  //penny input signal pin
+  penny = 11;
+  //music output signal pin
+  music = 53;
+  //motor run pwm signal output
+  streamers = 10;
+  //motor run pwm signal output
+  disco = 6;
+  //pot = 10;
+  duration = 0;
+  x = 0;
+  //analog signal value for high
+  vhigh = 128;
+  //analog signal value for low
+  vlow = 0;
+  //input pins for LEDs sensors
+  d1=5;
+  d2=7;
+  d3=9;
+  //start time
+  st_time = millis();
+  //box party run time
+  run_time = 17000;
+ 
+  //sets digital input pins
+  //BUTTONS 1 & 3
+  pinMode(45,INPUT);
+  //pinMode(47,INPUT);
+  pinMode(49,INPUT);
+  //sets digital output pins for music and motors
+  pinMode(music,OUTPUT);
+  pinMode(streamers,OUTPUT);
+  pinMode(disco,OUTPUT);  
+  //sets digital output pins for LEDs
+  pinMode(d1,OUTPUT);
+  pinMode(d2,OUTPUT);
+  pinMode(d3,OUTPUT);
+  //sets motor speeds, music, and LED's to off
+  analogWrite(streamers,0);
+  analogWrite(disco,0);
+  analogWrite(d1,vlow);
+  analogWrite(d2,vlow);
+  analogWrite(d3,vlow);
+}
+
+void loop() {
+    //read penny sensor value
+    start = analogRead(penny);
+    
+    //print sensor value output
+    // Serial.println(start);
+    
+    //if penny is in not in front of sensor
+    if(start > 750){
+      x = 0;
+      //resets LED output choice
+      choice = 0;
+
+      //sets timer duration back to zero
+      duration = 0;
+    }
+/*****************PENNY HOLD LOOP*/
+    //this loop is to timeout if someone holds the penny in the way for more than 'duration' seconds
+    //while penny is in front of sensor AND duration is less than wait time
+    while ((start < 250) & (duration < waittime) )
+    {
+      //this is the handling of the penny being held in the way of the sensor
+      start = analogRead(penny);
+      
+      //setting start time for timer
+      if(x == 0){ 
+        st_time = millis();
+        x++;
+      }
+      delay(550);
+      
+      //takes current time for timer
+      cur_time = millis();
+
+      //finds the time duration that has occurred since penny has been held in the way
+      duration = cur_time - st_time;
+      //Serial.println("waiting for penny to drop loop\n");
+
+      //if penny is no longer in the way and hasn't timed out (i.e. dropped through the sensor in less than 5 seconds of crossing sensor path)
+      if((start >750) & (duration < waittime)){
+        //set start timer
+        x = 0;
+        st_time = millis();
+        duration = 0;
+        
+        //music on
+        digitalWrite(music,HIGH);
+        
+        //start the motors
+        startball();               
+        //Serial.println("starting ballz");
+        delay(10);
+
+////////////////////MAIN RUN LOOP
+        //while the duration of the run is less than the designated run time, continue looping
+        while(duration < run_time){
+         //timer start and duration read
+         cur_time = millis();
+
+         //calculate run time duration
+         duration = cur_time - st_time;          
+      
+         //read pot for streamer motor speed
+         //analog reads between 0 - 1023
+         stspeed = analogRead(A10);     
+         
+         //set streamer motor speed
+         stspin(stspeed);        
+         //Serial.println(stspeed);
+    
+         //set disco ball speed
+         spinball();
+         delay(300);
+
+         //shut motors off to not run motors too long
+         stopball();
+         
+         //read button inputs
+         b1=digitalRead(45);
+         b3=digitalRead(49);
+
+         //depending on the button choice, set 'choice' to a different value
+         if(b1 == HIGH){
+          choice = 1;
+         }
+         if(b3 == HIGH){
+          if(b1 == HIGH){
+            choice = 2;
+          }else{
+            choice=3;
+          }
+         }
+
+         //swicth case for what to do with button press. Each function sets LED's to run a different way. 
+         switch(choice){
+          case 1:
+            cptn1();
+            break;
+          case 2:
+            cptnd();
+            break;
+          case 3:
+            cptn3();
+            break;
+          default:
+            cptnd();         
+            break;
+         }
+
+         //loop delay
+         delay(100);
+         //Serial.println(duration);
+         //Serial.println("main run loop\n");
+         //delay(50);
+    }      
+///////////////////END MAIN RUN LOOP          
+      }      
+      //this is to handle the penny timeout issues
+      if(x == 0){
+        duration = 0;
+      }
+    }
+/************** PENNY HOLD LOOP   */ 
+      //Once main run loop ends, turn everything off
+      //turn motors, music, lights all off
+      digitalWrite(music,LOW);
+      analogWrite(streamers,0);
+      analogWrite(disco,0);
+      lightsoff();
+}
+/*                   //MAIN LOOP END                       */
+
+/*                  //FUNCTIONS BELOW                      */
+void startball(){
+  //this function starts the disco ball spinning
+  //Serial.println("oh hay");
+  
+  //starts motor
+  analogWrite(disco,255);
+
+  //1 second hold
+  delay(1000);
+
+  //turns off motors then
+  analogWrite(disco,0);
+  //Serial.println("laterz");
+  return;
+}
+
+void spinball(){
+  //this function keeps the disco ball spinning
+  analogWrite(disco,210);
+  //delay(700);
+  //analogWrite(disco,0);
+  return;
+}
+
+void stspin(int twist){
+  //this function handles the streamer motor spinning once started. Input variable 'twist' gives the value between 0 - 1023 to change the motor speed
+  
+  //reduction of 1024 to 256
+  twist /= 4;
+
+  //changes range from 0-255 to 130-285, to time between .13ms to .285ms
+  twist += 130;
+  //Serial.println(twist);
+
+  //turns motors on full blast
+  analogWrite(streamers,255);
+
+  //waits 'twist' delay while motors are on
+  delay(twist);
+
+  //turns motors off
+  analogWrite(streamers,0);
+  return;
+}
+
+void stopball(){
+  //this functions stops both motors quickly
+  analogWrite(disco,0);
+  analogWrite(streamers,0);
+  return;
+}
+
+
+void cptn1(){
+  //This function sets the LED pattern to a certain way if button 1 is pressed. In this case led's should go R to L
+  analogWrite(d3,vhigh);
+  delay(70);
+  analogWrite(d3,vlow);
+  delay(70);
+  analogWrite(d2,vhigh);
+  delay(70);
+  analogWrite(d2,vlow);
+  delay(70);
+  analogWrite(d1,vhigh);
+  delay(70);
+  analogWrite(d1,vlow);
+  delay(70);
+  return;  
+}
+
+void cptn3(){
+  //This function sets the LED pattern to a certain way if button 3 is pressed. In this case led's should go L to R
+  analogWrite(d1,vhigh);
+  delay(70);
+  analogWrite(d1,vlow);
+  delay(70);
+  analogWrite(d2,vhigh);
+  delay(70);
+  analogWrite(d2,vlow);
+  delay(70);
+  analogWrite(d3,vhigh);
+  delay(70);
+  analogWrite(d3,vlow);
+  delay(70);
+  return;
+}
+
+void cptnd(){
+  //This function sets the LED pattern to a certain way if no button has been pressed. In this case led's should go center Right Left
+  analogWrite(d2,vhigh);
+  delay(120);
+  analogWrite(d2,vlow);
+  delay(70);
+  analogWrite(d1,vhigh);
+  delay(70);
+  analogWrite(d3,vhigh);
+  delay(70);
+  analogWrite(d1,vlow);
+  delay(70);  
+  analogWrite(d3,vlow);
+  delay(70); 
+  return;
+}
+
+void lightsoff(){
+  //this function turns off all the LEDs
+  analogWrite(d1,vlow);
+  analogWrite(d2,vlow);
+  analogWrite(d3,vlow);  
+}
